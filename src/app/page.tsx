@@ -2,7 +2,9 @@ import { fetchDashboardData } from "@/lib/fetcher";
 import Navbar from "@/components/Navbar";
 import NewsSection from "@/components/NewsSection";
 import EventsSection from "@/components/EventsSection";
+import ActivitiesSection from "@/components/ActivitiesSection";
 import DiningSection from "@/components/DiningSection";
+import OccupancySection from "@/components/OccupancySection";
 import QuickLinks from "@/components/QuickLinks";
 
 export const revalidate = 3600; // re-fetch data every hour
@@ -63,7 +65,13 @@ export default async function Home() {
               📅 {data.events.length} event{data.events.length !== 1 ? "s" : ""}
             </span>
             <span className="inline-flex items-center gap-1.5 bg-[#2a353a] border border-[#616566] rounded-full px-4 py-2 text-sm text-white shadow-sm">
+              🎯 {data.activities.length} activit{data.activities.length !== 1 ? "ies" : "y"}
+            </span>
+            <span className="inline-flex items-center gap-1.5 bg-[#2a353a] border border-[#616566] rounded-full px-4 py-2 text-sm text-white shadow-sm">
               🍽️ {data.restaurants.length} restaurants
+            </span>
+            <span className="inline-flex items-center gap-1.5 bg-[#2a353a] border border-[#616566] rounded-full px-4 py-2 text-sm text-white shadow-sm">
+              🏠 {data.occupancy.airbnb.totalListings + data.occupancy.vrbo.totalListings} rentals tracked
             </span>
           </div>
         </div>
@@ -72,7 +80,9 @@ export default async function Home() {
       <main className="flex-1">
         <NewsSection news={data.news} />
         <EventsSection events={data.events} />
+        <ActivitiesSection activities={data.activities} />
         <DiningSection restaurants={data.restaurants} />
+        <OccupancySection occupancy={data.occupancy} />
         <QuickLinks />
       </main>
 
