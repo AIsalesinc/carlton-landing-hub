@@ -71,7 +71,7 @@ export default async function Home() {
               🍽️ {data.restaurants.length} restaurants
             </span>
             <span className="inline-flex items-center gap-1.5 bg-[#2a353a] border border-[#616566] rounded-full px-4 py-2 text-sm text-white shadow-sm">
-              🏠 {data.occupancy.airbnb.totalListings + data.occupancy.vrbo.totalListings} rentals tracked
+              🏠 {data.occupancy.airbnb.totalListings + data.occupancy.vrbo.totalListings} rentals · {data.occupancy.airbnb.snapshots.length > 0 ? `${data.occupancy.airbnb.snapshots.length} weekends` : "tracking"}
             </span>
           </div>
         </div>

@@ -43,18 +43,27 @@ export interface RentalListing {
   guests?: number;
 }
 
-export interface RentalStats {
-  platform: string;
-  totalListings: number;
+export interface DateSnapshot {
+  label: string;         // e.g. "Apr 11–13" or "This Weekend"
+  checkIn: string;       // ISO date "2026-04-11"
+  checkOut: string;      // ISO date "2026-04-13"
+  availableListings: number;
   avgPrice: number | null;
   minPrice: number | null;
   maxPrice: number | null;
-  listings: RentalListing[];
+}
+
+export interface PlatformOccupancy {
+  platform: string;
+  totalListings: number;
+  baselineAvgPrice: number | null;   // avg price across all dates (the "normal" rate)
+  snapshots: DateSnapshot[];         // occupancy per upcoming date range
+  listings: RentalListing[];         // sample listings from latest search
 }
 
 export interface OccupancyData {
-  airbnb: RentalStats;
-  vrbo: RentalStats;
+  airbnb: PlatformOccupancy;
+  vrbo: PlatformOccupancy;
   lastChecked: string;
 }
 

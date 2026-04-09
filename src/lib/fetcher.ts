@@ -5,7 +5,8 @@ import type {
   Restaurant,
   Activity,
   RentalListing,
-  RentalStats,
+  DateSnapshot,
+  PlatformOccupancy,
   OccupancyData,
   DashboardData,
 } from "./types";
@@ -480,282 +481,311 @@ async function fetchActivities(): Promise<Activity[]> {
 
 // ─── Rental Occupancy & Pricing: Airbnb + VRBO ───
 
-function emptyStats(platform: string): RentalStats {
-  return { platform, totalListings: 0, avgPrice: null, minPrice: null, maxPrice: null, listings: [] };
-}
+const BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+};
 
-async function fetchAirbnbData(): Promise<RentalStats> {
-  try {
-    // Airbnb search page embeds listing data in script tags
-    const searchUrl =
-      "https://www.airbnb.com/s/Carlton-Landing--OK--United-States/homes?tab_id=home_tab&refinement_paths%5B%5D=%2Fhomes";
-    const res = await fetch(searchUrl, {
-      signal: AbortSignal.timeout(15000),
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
+/** Generate upcoming Fri→Sun date ranges for the next ~6 weekends */
+function getUpcomingWeekends(count = 6): { label: string; checkIn: string; checkOut: string }[] {
+  const ranges: { label: string; checkIn: string; checkOut: string }[] = [];
+  const now = new Date();
+  // Start from tomorrow to avoid stale "today" results
+  const cursor = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+
+  // Advance to next Friday
+  while (cursor.getDay() !== 5) cursor.setDate(cursor.getDate() + 1);
+
+  const fmt = (d: Date) => d.toISOString().split("T")[0];
+  const shortMonth = (d: Date) =>
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  for (let i = 0; i < count; i++) {
+    const fri = new Date(cursor);
+    const sun = new Date(cursor);
+    sun.setDate(sun.getDate() + 2);
+    ranges.push({
+      label: i === 0 ? "This Weekend" : `${shortMonth(fri)}–${sun.getDate()}`,
+      checkIn: fmt(fri),
+      checkOut: fmt(sun),
     });
-
-    if (!res.ok) return emptyStats("Airbnb");
-    const html = await res.text();
-
-    const listings: RentalListing[] = [];
-
-    // Strategy 1: Parse __NEXT_DATA__ JSON embedded in the page
-    const nextDataMatch = html.match(/<script\s+id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-    if (nextDataMatch) {
-      try {
-        const nextData = JSON.parse(nextDataMatch[1]);
-        // Navigate the nested structure to find listing data
-        const searchResults =
-          nextData?.props?.pageProps?.bootstrapData?.reduxData?.exploreTab?.sections ||
-          nextData?.props?.pageProps?.searchResults ||
-          [];
-
-        const extractListings = (obj: Record<string, unknown>): void => {
-          if (!obj || typeof obj !== "object") return;
-          // Look for listing-like objects with price info
-          if (
-            "listing" in obj &&
-            typeof (obj as Record<string, unknown>).listing === "object"
-          ) {
-            const listing = obj.listing as Record<string, unknown>;
-            const pricingQuote = (obj as Record<string, unknown>).pricingQuote as Record<string, unknown> | undefined;
-            const price = pricingQuote
-              ? ((pricingQuote.price as Record<string, unknown>)?.amount as number) ||
-                ((pricingQuote.structuredStayDisplayPrice as Record<string, unknown>)?.primaryLine as Record<string, unknown>)?.price as number ||
-                null
-              : null;
-
-            listings.push({
-              name: (listing.name as string) || (listing.title as string) || "Carlton Landing Property",
-              price: typeof price === "number" ? Math.round(price) : null,
-              url: listing.id
-                ? `https://www.airbnb.com/rooms/${listing.id}`
-                : "https://www.airbnb.com/s/Carlton-Landing--OK/homes",
-              platform: "airbnb",
-              rating: typeof listing.avgRating === "number" ? listing.avgRating : undefined,
-              reviews: typeof listing.reviewsCount === "number" ? listing.reviewsCount : undefined,
-              bedrooms: typeof listing.bedrooms === "number" ? listing.bedrooms : undefined,
-              guests: typeof listing.personCapacity === "number" ? listing.personCapacity : undefined,
-            });
-          }
-          // Recurse
-          for (const val of Object.values(obj)) {
-            if (val && typeof val === "object") {
-              if (Array.isArray(val)) {
-                val.forEach((item) => {
-                  if (item && typeof item === "object") extractListings(item as Record<string, unknown>);
-                });
-              } else {
-                extractListings(val as Record<string, unknown>);
-              }
-            }
-          }
-        };
-
-        if (Array.isArray(searchResults)) {
-          searchResults.forEach((section: Record<string, unknown>) => extractListings(section));
-        } else {
-          extractListings(nextData.props?.pageProps || {});
-        }
-      } catch {
-        // JSON parse failed, continue to fallback
-      }
-    }
-
-    // Strategy 2: Try to find price patterns in HTML with cheerio
-    if (listings.length === 0) {
-      const $ = cheerio.load(html);
-
-      // Airbnb often shows prices in specific patterns
-      const priceRegex = /\$(\d{2,4})\s*(?:\/?\s*night|per\s*night|nightly)/gi;
-      const bodyText = $("body").text();
-      const priceMatches = [...bodyText.matchAll(priceRegex)];
-      const prices = priceMatches.map((m) => parseInt(m[1], 10)).filter((p) => p > 50 && p < 5000);
-
-      // Count listing cards
-      const cardCount = $("[itemprop='itemListElement'], [data-testid='card-container'], .c4mnd7m, .g1qv1ctd, .cy5jw6o").length;
-
-      if (prices.length > 0 || cardCount > 0) {
-        const count = Math.max(prices.length, cardCount, 1);
-        for (let i = 0; i < count && i < 20; i++) {
-          listings.push({
-            name: `Carlton Landing Property ${i + 1}`,
-            price: prices[i] || null,
-            url: "https://www.airbnb.com/s/Carlton-Landing--OK/homes",
-            platform: "airbnb",
-          });
-        }
-      }
-    }
-
-    // Strategy 3: Look for JSON-LD structured data
-    if (listings.length === 0) {
-      const $ = cheerio.load(html);
-      $('script[type="application/ld+json"]').each((_, el) => {
-        try {
-          const ld = JSON.parse($(el).html() || "{}");
-          if (ld["@type"] === "ItemList" && Array.isArray(ld.itemListElement)) {
-            ld.itemListElement.forEach((item: Record<string, unknown>) => {
-              listings.push({
-                name: (item.name as string) || "Carlton Landing Property",
-                price: null,
-                url: (item.url as string) || "https://www.airbnb.com/s/Carlton-Landing--OK/homes",
-                platform: "airbnb",
-              });
-            });
-          }
-        } catch {
-          // skip
-        }
-      });
-    }
-
-    const prices = listings.map((l) => l.price).filter((p): p is number => p !== null && p > 0);
-    return {
-      platform: "Airbnb",
-      totalListings: listings.length,
-      avgPrice: prices.length > 0 ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : null,
-      minPrice: prices.length > 0 ? Math.min(...prices) : null,
-      maxPrice: prices.length > 0 ? Math.max(...prices) : null,
-      listings: listings.slice(0, 20),
-    };
-  } catch {
-    return emptyStats("Airbnb");
+    cursor.setDate(cursor.getDate() + 7);
   }
+  return ranges;
 }
 
-async function fetchVrboData(): Promise<RentalStats> {
-  try {
-    const searchUrl =
-      "https://www.vrbo.com/vacation-rentals/usa/oklahoma/carlton-landing";
-    const res = await fetch(searchUrl, {
-      signal: AbortSignal.timeout(15000),
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    });
+/** Deep-search a JSON tree for listing / price objects */
+function extractListingsFromJson(
+  obj: unknown,
+  platform: "airbnb" | "vrbo",
+  fallbackUrl: string,
+): RentalListing[] {
+  const listings: RentalListing[] = [];
+  const seen = new Set<string>();
 
-    if (!res.ok) return emptyStats("VRBO");
-    const html = await res.text();
-    const $ = cheerio.load(html);
-    const listings: RentalListing[] = [];
+  function walk(node: unknown): void {
+    if (!node || typeof node !== "object") return;
+    const rec = node as Record<string, unknown>;
 
-    // VRBO embeds property data in script tags or __NEXT_DATA__
-    const nextDataMatch = html.match(/<script\s+id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-    if (nextDataMatch) {
-      try {
-        const data = JSON.parse(nextDataMatch[1]);
-        const extractVrbo = (obj: Record<string, unknown>): void => {
-          if (!obj || typeof obj !== "object") return;
-          // VRBO listings typically have propertyId and headline
-          if ("propertyId" in obj || "headline" in obj) {
-            const price =
-              (((obj as Record<string, unknown>).price as Record<string, unknown>)?.lead as Record<string, unknown>)?.amount as number ||
-              ((obj as Record<string, unknown>).averagePrice as Record<string, unknown>)?.amount as number ||
-              null;
-            const name = (obj.headline as string) || (obj.name as string) || "Carlton Landing Rental";
-            if (name.length > 2) {
-              listings.push({
-                name: name.slice(0, 80),
-                price: typeof price === "number" ? Math.round(price) : null,
-                url: obj.propertyId
-                  ? `https://www.vrbo.com/${obj.propertyId}ha`
-                  : searchUrl,
-                platform: "vrbo",
-                rating: typeof obj.averageRating === "number" ? obj.averageRating : undefined,
-                reviews: typeof obj.reviewCount === "number" ? obj.reviewCount : undefined,
-                bedrooms: typeof obj.bedrooms === "number" ? obj.bedrooms : undefined,
-                guests: typeof obj.sleeps === "number" ? obj.sleeps : undefined,
-              });
-            }
-          }
-          for (const val of Object.values(obj)) {
-            if (val && typeof val === "object") {
-              if (Array.isArray(val)) {
-                val.forEach((item) => {
-                  if (item && typeof item === "object") extractVrbo(item as Record<string, unknown>);
-                });
-              } else {
-                extractVrbo(val as Record<string, unknown>);
-              }
-            }
-          }
-        };
-        extractVrbo(data);
-      } catch {
-        // continue to fallback
+    // ── Airbnb shape ──
+    if (platform === "airbnb" && "listing" in rec && typeof rec.listing === "object") {
+      const listing = rec.listing as Record<string, unknown>;
+      const pq = rec.pricingQuote as Record<string, unknown> | undefined;
+      let price: number | null = null;
+      if (pq) {
+        const amt = (pq.price as Record<string, unknown>)?.amount;
+        const structured = (
+          (pq.structuredStayDisplayPrice as Record<string, unknown>)?.primaryLine as Record<string, unknown>
+        )?.price;
+        price = typeof amt === "number" ? amt : typeof structured === "number" ? structured : null;
       }
-    }
-
-    // Fallback: parse visible price text
-    if (listings.length === 0) {
-      const priceRegex = /\$(\d{2,4})\s*(?:\/?\s*(?:night|avg))/gi;
-      const bodyText = $("body").text();
-      const priceMatches = [...bodyText.matchAll(priceRegex)];
-      const prices = priceMatches.map((m) => parseInt(m[1], 10)).filter((p) => p > 50 && p < 5000);
-
-      // Try to get total listing count from page text
-      const countMatch = bodyText.match(/(\d{1,4})\s*(?:properties|results|rentals|vacation)/i);
-      const totalFromPage = countMatch ? parseInt(countMatch[1], 10) : 0;
-
-      const count = Math.max(prices.length, 1);
-      for (let i = 0; i < count && i < 20; i++) {
+      const id = String(listing.id || "");
+      if (id && !seen.has(id)) {
+        seen.add(id);
         listings.push({
-          name: `Carlton Landing Rental ${i + 1}`,
-          price: prices[i] || null,
-          url: searchUrl,
-          platform: "vrbo",
+          name: (listing.name as string) || (listing.title as string) || "Carlton Landing Property",
+          price: typeof price === "number" ? Math.round(price) : null,
+          url: id ? `https://www.airbnb.com/rooms/${id}` : fallbackUrl,
+          platform: "airbnb",
+          rating: typeof listing.avgRating === "number" ? listing.avgRating : undefined,
+          reviews: typeof listing.reviewsCount === "number" ? listing.reviewsCount : undefined,
+          bedrooms: typeof listing.bedrooms === "number" ? listing.bedrooms : undefined,
+          guests: typeof listing.personCapacity === "number" ? listing.personCapacity : undefined,
         });
       }
+    }
 
-      if (totalFromPage > listings.length) {
-        // We know there are more listings than we parsed prices for
-        const prices2 = listings.map((l) => l.price).filter((p): p is number => p !== null);
-        return {
-          platform: "VRBO",
-          totalListings: totalFromPage,
-          avgPrice: prices2.length > 0 ? Math.round(prices2.reduce((a, b) => a + b, 0) / prices2.length) : null,
-          minPrice: prices2.length > 0 ? Math.min(...prices2) : null,
-          maxPrice: prices2.length > 0 ? Math.max(...prices2) : null,
-          listings,
-        };
+    // ── VRBO shape ──
+    if (platform === "vrbo" && ("propertyId" in rec || "headline" in rec)) {
+      const priceLead = ((rec.price as Record<string, unknown>)?.lead as Record<string, unknown>)?.amount;
+      const priceAvg = (rec.averagePrice as Record<string, unknown>)?.amount;
+      const price = typeof priceLead === "number" ? priceLead : typeof priceAvg === "number" ? priceAvg : null;
+      const name = (rec.headline as string) || (rec.name as string) || "";
+      const pid = String(rec.propertyId || name);
+      if (name.length > 2 && !seen.has(pid)) {
+        seen.add(pid);
+        listings.push({
+          name: name.slice(0, 80),
+          price: typeof price === "number" ? Math.round(price) : null,
+          url: rec.propertyId ? `https://www.vrbo.com/${rec.propertyId}ha` : fallbackUrl,
+          platform: "vrbo",
+          rating: typeof rec.averageRating === "number" ? rec.averageRating : undefined,
+          reviews: typeof rec.reviewCount === "number" ? rec.reviewCount : undefined,
+          bedrooms: typeof rec.bedrooms === "number" ? rec.bedrooms : undefined,
+          guests: typeof rec.sleeps === "number" ? rec.sleeps : undefined,
+        });
       }
     }
 
-    // Deduplicate by name
-    const seen = new Set<string>();
-    const dedupedListings = listings.filter((l) => {
-      const key = l.name.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    // Recurse
+    for (const val of Object.values(rec)) {
+      if (Array.isArray(val)) val.forEach(walk);
+      else if (val && typeof val === "object") walk(val);
+    }
+  }
 
-    const prices = dedupedListings.map((l) => l.price).filter((p): p is number => p !== null && p > 0);
+  walk(obj);
+  return listings;
+}
+
+/** Parse prices from raw page text as a fallback */
+function parsePricesFromText(text: string): number[] {
+  const regex = /\$(\d{2,4})\s*(?:\/?\s*(?:night|avg|nightly|per\s*night))/gi;
+  return [...text.matchAll(regex)]
+    .map((m) => parseInt(m[1], 10))
+    .filter((p) => p > 50 && p < 5000);
+}
+
+/** Parse listing count from page text */
+function parseListingCount(text: string): number {
+  const m = text.match(/(\d{1,4})\s*(?:properties|results|rentals|vacation|homes|places)/i);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
+/** Fetch a single Airbnb search (with optional dates) and return listings */
+async function fetchAirbnbSearch(
+  checkIn?: string,
+  checkOut?: string,
+): Promise<RentalListing[]> {
+  let url = "https://www.airbnb.com/s/Carlton-Landing--OK--United-States/homes?tab_id=home_tab&refinement_paths%5B%5D=%2Fhomes";
+  if (checkIn && checkOut) {
+    url += `&checkin=${checkIn}&checkout=${checkOut}`;
+  }
+
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(15000),
+    headers: BROWSER_HEADERS,
+  });
+  if (!res.ok) return [];
+  const html = await res.text();
+
+  // Try __NEXT_DATA__ embedded JSON
+  const m = html.match(/<script\s+id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+  if (m) {
+    try {
+      const data = JSON.parse(m[1]);
+      const listings = extractListingsFromJson(data, "airbnb", url);
+      if (listings.length > 0) return listings;
+    } catch { /* fall through */ }
+  }
+
+  // Try JSON-LD
+  const $ = cheerio.load(html);
+  const ldListings: RentalListing[] = [];
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const ld = JSON.parse($(el).html() || "{}");
+      if (ld["@type"] === "ItemList" && Array.isArray(ld.itemListElement)) {
+        ld.itemListElement.forEach((item: Record<string, unknown>) => {
+          ldListings.push({
+            name: (item.name as string) || "Carlton Landing Property",
+            price: null,
+            url: (item.url as string) || url,
+            platform: "airbnb",
+          });
+        });
+      }
+    } catch { /* skip */ }
+  });
+  if (ldListings.length > 0) return ldListings;
+
+  // Fallback: price text
+  const bodyText = $("body").text();
+  const prices = parsePricesFromText(bodyText);
+  const cardCount = $("[itemprop='itemListElement'], [data-testid='card-container']").length;
+  const count = Math.max(prices.length, cardCount);
+  if (count > 0) {
+    return Array.from({ length: Math.min(count, 20) }, (_, i) => ({
+      name: `Carlton Landing Property ${i + 1}`,
+      price: prices[i] || null,
+      url,
+      platform: "airbnb" as const,
+    }));
+  }
+
+  // Last resort: try listing count from text
+  const textCount = parseListingCount(bodyText);
+  if (textCount > 0) {
+    return Array.from({ length: Math.min(textCount, 20) }, (_, i) => ({
+      name: `Carlton Landing Property ${i + 1}`,
+      price: prices[i] || null,
+      url,
+      platform: "airbnb" as const,
+    }));
+  }
+
+  return [];
+}
+
+/** Fetch a single VRBO search (with optional dates) and return listings */
+async function fetchVrboSearch(
+  checkIn?: string,
+  checkOut?: string,
+): Promise<RentalListing[]> {
+  let url = "https://www.vrbo.com/vacation-rentals/usa/oklahoma/carlton-landing";
+  if (checkIn && checkOut) {
+    url += `?startDate=${checkIn}&endDate=${checkOut}`;
+  }
+
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(15000),
+    headers: BROWSER_HEADERS,
+  });
+  if (!res.ok) return [];
+  const html = await res.text();
+  const $ = cheerio.load(html);
+
+  // Try __NEXT_DATA__
+  const m = html.match(/<script\s+id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+  if (m) {
+    try {
+      const data = JSON.parse(m[1]);
+      const listings = extractListingsFromJson(data, "vrbo", url);
+      if (listings.length > 0) return listings;
+    } catch { /* fall through */ }
+  }
+
+  // Fallback: price text + count
+  const bodyText = $("body").text();
+  const prices = parsePricesFromText(bodyText);
+  const textCount = parseListingCount(bodyText);
+  const count = Math.max(prices.length, textCount, 0);
+  if (count > 0) {
+    return Array.from({ length: Math.min(count, 20) }, (_, i) => ({
+      name: `Carlton Landing Rental ${i + 1}`,
+      price: prices[i] || null,
+      url,
+      platform: "vrbo" as const,
+    }));
+  }
+
+  return [];
+}
+
+function buildPlatformOccupancy(
+  platform: string,
+  baselineListings: RentalListing[],
+  weekendResults: { range: { label: string; checkIn: string; checkOut: string }; listings: RentalListing[] }[],
+): PlatformOccupancy {
+  const total = baselineListings.length;
+  const basePrices = baselineListings.map((l) => l.price).filter((p): p is number => p !== null && p > 0);
+  const baselineAvg = basePrices.length > 0 ? Math.round(basePrices.reduce((a, b) => a + b, 0) / basePrices.length) : null;
+
+  const snapshots: DateSnapshot[] = weekendResults.map(({ range, listings }) => {
+    const prices = listings.map((l) => l.price).filter((p): p is number => p !== null && p > 0);
     return {
-      platform: "VRBO",
-      totalListings: dedupedListings.length,
+      label: range.label,
+      checkIn: range.checkIn,
+      checkOut: range.checkOut,
+      availableListings: listings.length,
       avgPrice: prices.length > 0 ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : null,
       minPrice: prices.length > 0 ? Math.min(...prices) : null,
       maxPrice: prices.length > 0 ? Math.max(...prices) : null,
-      listings: dedupedListings.slice(0, 20),
     };
-  } catch {
-    return emptyStats("VRBO");
-  }
+  });
+
+  return {
+    platform,
+    totalListings: total,
+    baselineAvgPrice: baselineAvg,
+    snapshots,
+    listings: baselineListings.slice(0, 12),
+  };
 }
 
 async function fetchOccupancy(): Promise<OccupancyData> {
-  const [airbnb, vrbo] = await Promise.all([fetchAirbnbData(), fetchVrboData()]);
-  return { airbnb, vrbo, lastChecked: new Date().toISOString() };
+  const weekends = getUpcomingWeekends(6);
+
+  // Fetch baseline (no dates = all listings) for both platforms
+  const [airbnbBase, vrboBase] = await Promise.all([
+    fetchAirbnbSearch().catch(() => [] as RentalListing[]),
+    fetchVrboSearch().catch(() => [] as RentalListing[]),
+  ]);
+
+  // Fetch each weekend in parallel for both platforms
+  const airbnbWeekendPromises = weekends.map((w) =>
+    fetchAirbnbSearch(w.checkIn, w.checkOut)
+      .catch(() => [] as RentalListing[])
+      .then((listings) => ({ range: w, listings })),
+  );
+  const vrboWeekendPromises = weekends.map((w) =>
+    fetchVrboSearch(w.checkIn, w.checkOut)
+      .catch(() => [] as RentalListing[])
+      .then((listings) => ({ range: w, listings })),
+  );
+
+  const [airbnbWeekends, vrboWeekends] = await Promise.all([
+    Promise.all(airbnbWeekendPromises),
+    Promise.all(vrboWeekendPromises),
+  ]);
+
+  return {
+    airbnb: buildPlatformOccupancy("Airbnb", airbnbBase, airbnbWeekends),
+    vrbo: buildPlatformOccupancy("VRBO", vrboBase, vrboWeekends),
+    lastChecked: new Date().toISOString(),
+  };
 }
 
 // ─── Main data fetcher ───
