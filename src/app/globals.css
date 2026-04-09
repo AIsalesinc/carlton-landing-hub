@@ -1,12 +1,15 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-lake: #2563eb;
-  --color-lake-dark: #1d4ed8;
-  --color-lake-light: #dbeafe;
-  --color-forest: #166534;
-  --color-sand: #fef3c7;
+  --color-dark-bg: #20292C;
+  --color-accent: #26ACE8;
+  --color-white: #FFFFFF;
+  --color-muted: #999999;
+  --color-dim: #555555;
+  --color-border: #616566;
+  --color-ghost-border: #828282;
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
 }
 
 html {
@@ -14,8 +17,8 @@ html {
 }
 
 body {
-  background: #f8fafc;
-  color: #1e293b;
+  background: #20292C;
+  color: #FFFFFF;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
@@ -36,4 +39,41 @@ body {
 .nav-blur {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+/* RevFirma button styles */
+.btn-primary {
+  background-color: #26ACE8;
+  color: #000000;
+  border-radius: 99px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 0.625rem 1.5rem;
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-ghost {
+  background-color: transparent;
+  border: 1px solid #616566;
+  color: #FFFFFF;
+  border-radius: 99px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 0.625rem 1.5rem;
+  transition: all 0.2s ease;
+}
+
+.btn-ghost:hover {
+  border-color: #26ACE8;
+  color: #26ACE8;
 }

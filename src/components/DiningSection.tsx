@@ -3,12 +3,12 @@ import type { Restaurant } from "@/lib/types";
 function StatusDot({ hours }: { hours: string }) {
   const lower = hours.toLowerCase();
   if (lower.includes("closed")) {
-    return <span className="inline-block w-2 h-2 rounded-full bg-red-400" />;
+    return <span className="inline-block w-2 h-2 rounded-full bg-red-500" />;
   }
   if (lower.includes("seasonal") || lower.includes("check")) {
-    return <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />;
+    return <span className="inline-block w-2 h-2 rounded-full bg-yellow-500" />;
   }
-  return <span className="inline-block w-2 h-2 rounded-full bg-emerald-400" />;
+  return <span className="inline-block w-2 h-2 rounded-full bg-green-500" />;
 }
 
 export default function DiningSection({
@@ -17,22 +17,22 @@ export default function DiningSection({
   restaurants: Restaurant[];
 }) {
   return (
-    <section id="dining" className="py-16 px-6">
+    <section id="dining" className="py-16 px-6 bg-[#20292C]">
       <div className="max-w-6xl mx-auto">
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">
+        <h2 className="text-2xl font-bold text-white mb-2">
           Dining &amp; Drinks
         </h2>
-        <p className="text-slate-500 mb-8">
+        <p className="text-[#999999] mb-8">
           Restaurants and cafés in Carlton Landing
         </p>
         <div className="grid gap-6 md:grid-cols-2">
           {restaurants.map((r, i) => (
             <div
               key={i}
-              className="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-md transition-shadow"
+              className="bg-[#2a353a] rounded-2xl border border-[#616566] p-6 hover:border-[#26ACE8] hover:shadow-lg transition-all"
             >
               <div className="flex items-start justify-between gap-3 mb-3">
-                <h3 className="font-semibold text-lg text-slate-900">
+                <h3 className="font-semibold text-lg text-white">
                   {r.name}
                 </h3>
                 {r.url && (
@@ -40,7 +40,7 @@ export default function DiningSection({
                     href={r.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-500 hover:text-blue-700 shrink-0 mt-1"
+                    className="text-[#26ACE8] hover:text-[#26ACE8]/80 shrink-0 mt-1"
                     aria-label={`Visit ${r.name} website`}
                   >
                     <svg
@@ -60,7 +60,7 @@ export default function DiningSection({
                 )}
               </div>
 
-              <p className="text-sm text-slate-500 leading-relaxed mb-4">
+              <p className="text-sm text-[#999999] leading-relaxed mb-4">
                 {r.description}
               </p>
 
@@ -69,7 +69,7 @@ export default function DiningSection({
                 {r.tags.map((tag) => (
                   <span
                     key={tag}
-                    className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600"
+                    className="text-xs font-medium px-2 py-0.5 rounded-full bg-[#1a1f22] text-[#999999] border border-[#616566]"
                   >
                     {tag}
                   </span>
@@ -77,8 +77,8 @@ export default function DiningSection({
               </div>
 
               {/* Hours */}
-              <div className="border-t border-slate-100 pt-4 space-y-1.5">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+              <div className="border-t border-[#616566] pt-4 space-y-1.5">
+                <p className="text-xs font-semibold text-[#999999] uppercase tracking-wider mb-2">
                   Hours
                 </p>
                 {r.hours.map((h, j) => (
@@ -88,9 +88,9 @@ export default function DiningSection({
                   >
                     <div className="flex items-center gap-2">
                       <StatusDot hours={h.hours} />
-                      <span className="text-slate-600">{h.day}</span>
+                      <span className="text-[#999999]">{h.day}</span>
                     </div>
-                    <span className="text-slate-900 font-medium">
+                    <span className="text-white font-medium">
                       {h.hours}
                     </span>
                   </div>
@@ -98,13 +98,13 @@ export default function DiningSection({
               </div>
 
               {r.phone && (
-                <p className="text-sm text-slate-500 mt-3">📞 {r.phone}</p>
+                <p className="text-sm text-[#999999] mt-3">📞 {r.phone}</p>
               )}
             </div>
           ))}
         </div>
 
-        <p className="text-xs text-slate-400 text-center mt-6">
+        <p className="text-xs text-[#999999] text-center mt-6">
           Hours may vary seasonally. Always call ahead or check social media for
           the latest.
         </p>

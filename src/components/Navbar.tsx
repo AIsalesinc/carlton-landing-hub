@@ -22,20 +22,16 @@ export default function Navbar() {
   return (
     <nav
       className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 nav-blur ${
-        scrolled ? "bg-white/90 shadow-sm" : "bg-transparent"
+        scrolled ? "bg-[#20292C]/95 shadow-sm border-b border-[#616566]" : "bg-transparent"
       }`}
     >
       <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
-        <a href="#" className="flex items-center gap-2">
-          <svg viewBox="0 0 28 28" className="w-7 h-7 text-blue-600" fill="currentColor">
-            <path d="M14 2C7.373 2 2 6.925 2 13c0 3.38 1.65 6.41 4.243 8.5C6.09 23.66 5 25.2 5 25.2s3.72-.8 5.8-2.3c.98.22 2.02.34 3.1.34 6.627 0 12-4.925 12-11S20.627 2 14 2z" opacity=".15"/>
-            <path d="M14 4C8.477 4 4 8.03 4 13c0 2.87 1.5 5.43 3.84 7.1l.5.36-.2.6c-.33.97-.85 1.85-1.37 2.55.95-.33 2-.82 2.84-1.44l.48-.35.57.13c1.06.24 2.2.37 3.34.37 5.523 0 10-4.03 10-9s-4.477-9-10-9z"/>
-            <circle cx="9.5" cy="13" r="1.5" fill="white"/>
-            <circle cx="14" cy="13" r="1.5" fill="white"/>
-            <circle cx="18.5" cy="13" r="1.5" fill="white"/>
+        <a href="#" className="flex items-center gap-3">
+          <svg viewBox="0 0 139.89 157.21" className="w-8 h-8" fill="none">
+            <path fill="#26ACE8" d="M132.16,91.12l-15.19-8.77c-3.74-2.16-3.74-5.69,0-7.84l14.58-8.42c3.74-2.16,6.79-7.45,6.79-11.77v-26.59c0-4.31-3.06-9.61-6.79-11.77l-23.03-13.3c-3.74-2.16-9.85-2.16-13.59,0l-23.03,13.3c-3.74,2.16-6.79,7.45-6.79,11.77v16.14c0,4.31-3.06,6.08-6.79,3.92l-13.97-8.07c-3.74-2.16-9.85-2.16-13.59,0l-23.03,13.3c-3.74,2.16-6.79,7.45-6.79,11.77v26.59c0,4.31,3.06,9.61,6.79,11.77l23.03,13.3c3.74,2.16,9.85,2.16,13.59,0l14.58-8.42c3.74-2.16,6.79-.39,6.79,3.92v17.54c0,4.31,3.06,9.61,6.79,11.77l23.03,13.3c3.74,2.16,9.85,2.16,13.59,0l23.03-13.3c3.74-2.16,6.79-7.45,6.79-11.77v-26.59c0-4.31-3.06-9.61-6.79-11.77ZM104.55,83.15c0,1.67-1.18,3.72-2.63,4.56l-24.04,13.88c-1.45.84-3.81.84-5.26,0l-8.92-5.15c-1.45-.84-2.63-2.89-2.63-4.56v-27.76c0-1.67,1.18-3.72,2.63-4.56l8.92-5.15c1.45-.84,3.81-.84,5.26,0l24.04,13.88c1.45.84,2.63,2.89,2.63,4.56v10.3Z"/>
           </svg>
-          <span className="font-semibold text-lg tracking-tight text-slate-900">
-            Carlton Landing Hub
+          <span className="font-semibold text-lg tracking-tight text-white">
+            RevFirma
           </span>
         </a>
 
@@ -45,7 +41,7 @@ export default function Navbar() {
             <a
               key={l.href}
               href={l.href}
-              className="text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors"
+              className="text-sm font-medium text-[#999999] hover:text-[#26ACE8] transition-colors"
             >
               {l.label}
             </a>
@@ -54,11 +50,11 @@ export default function Navbar() {
 
         {/* Mobile hamburger */}
         <button
-          className="md:hidden p-2 rounded-lg hover:bg-slate-100 transition-colors"
+          className="md:hidden p-2 rounded-lg hover:bg-[#2a353a] transition-colors"
           onClick={() => setMenuOpen(!menuOpen)}
           aria-label="Toggle menu"
         >
-          <svg className="w-5 h-5 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             {menuOpen ? (
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             ) : (
@@ -70,12 +66,12 @@ export default function Navbar() {
 
       {/* Mobile menu */}
       {menuOpen && (
-        <div className="md:hidden bg-white/95 nav-blur border-t border-slate-100 px-6 py-4 space-y-3">
+        <div className="md:hidden bg-[#20292C]/95 nav-blur border-t border-[#616566] px-6 py-4 space-y-3">
           {links.map((l) => (
             <a
               key={l.href}
               href={l.href}
-              className="block text-sm font-medium text-slate-600 hover:text-blue-600"
+              className="block text-sm font-medium text-[#999999] hover:text-[#26ACE8]"
               onClick={() => setMenuOpen(false)}
             >
               {l.label}
